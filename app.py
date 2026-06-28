@@ -7,6 +7,12 @@ from flask import Flask, request, Response
 from groq import Groq
 import requests
 
+# --- GEVENT ASYNCIO BRIDGE PATCH ---
+import gevent.monkey
+gevent.monkey.patch_all()
+from gevent_loop import GeventLoop
+asyncio.set_event_loop_policy(GeventLoop())
+
 app = Flask(__name__)
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
@@ -25,7 +31,7 @@ def generate_phone_voice(text_data):
     """Converts AI responses into 8kHz Mu-law telephony audio streams."""
     model = "aura-asteria-en"
     if any("\u0900" <= char <= "\u097F" for char in text_data):
-        model = "aura-amira-hi"  # Crisp native Hindi voice mapping
+        model = "aura-amira-hi"
         
     url = f"https://api.deepgram.com/v1/speak?model={model}&encoding=mulaw&sample_rate=8000"
     headers = {"Authorization": f"Token {DEEPGRAM_API_KEY}", "Content-Type": "application/json"}
@@ -59,7 +65,6 @@ async def dg_stream_handler(ws, stream_sid, call_history):
                     print(f"🗣️ Transcribed Voice: {transcript}")
                     call_history.append({"role": "user", "content": transcript})
                     
-                    # Generate AI text response via Llama
                     loop = asyncio.get_event_loop()
                     completion = await loop.run_in_executor(None, lambda: groq_client.chat.completions.create(
                         messages=call_history, model="llama-3.3-70b-versatile"
@@ -68,7 +73,6 @@ async def dg_stream_handler(ws, stream_sid, call_history):
                     print(f"🤖 AI Reply: {ai_text}")
                     call_history.append({"role": "assistant", "content": ai_text})
                     
-                    # Convert to audio and stream back immediately
                     audio_payload = generate_phone_voice(ai_text)
                     if audio_payload:
                         await ws.send(json.dumps({
@@ -83,7 +87,6 @@ async def dg_stream_handler(ws, stream_sid, call_history):
                 data = json.loads(message)
                 
                 if data['event'] == "media":
-                    # Forward the raw phone mic audio packets directly into Deepgram
                     payload = data['media']['payload']
                     await dg_ws.send(json.dumps({"chunky_demux_stream": payload}))
                 elif data['event'] == "stop":
@@ -97,7 +100,6 @@ def handle_websocket(ws):
     stream_sid = None
     call_history = [{"role": "system", "content": SYSTEM_PROMPT}]
     
-    # Send Greeting out of the box
     message = ws.receive()
     if message:
         data = json.loads(message)
@@ -109,8 +111,9 @@ def handle_websocket(ws):
                 ws.send(json.dumps({"event": "media", "streamSid": stream_sid, "media": {"payload": audio_payload}}))
             call_history.append({"role": "assistant", "content": greeting})
             
-            # Start the dual async pipeline engine
-            asyncio.run(dg_stream_handler(ws, stream_sid, call_history))
+            # Start the bridged loop cleanly
+            loop = asyncio.get_event_loop()
+            loop.run_until_complete(dg_stream_handler(ws, stream_sid, call_history))
 
 class NativeWebSocketDispatcher(object):
     def __init__(self, flask_app):
