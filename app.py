@@ -4,21 +4,22 @@ from flask_cors import CORS
 from groq import Groq
 
 app = Flask(__name__)
-# Enable CORS so your beautiful Zeit AI dashboard can talk to this server smoothly
 CORS(app)
 
 # --- SECURE API KEY CONFIGURATION ---
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 groq_client = Groq(api_key=GROQ_API_KEY)
 
+# --- PURE HINDI CUSTOM RECEPTONIST PROMPT ---
 SYSTEM_PROMPT = (
-    "You are a friendly, professional Indian female AI medical receptionist for City Hospital. "
-    "Collect appointment details step-by-step: 1. Name, 2. Department, 3. Date/Time. "
-    "Respond in the language chosen by the user (English, Hindi, or Hinglish). "
-    "Keep answers strictly 1 to 2 sentences max. Do not include any markdown formatting."
+    "आप सिटी हॉस्पिटल (City Hospital) की एक बहुत ही विनम्र, मददगार और पेशेवर महिला एआई रिसेप्शनिस्ट (AI Receptionist) हैं। "
+    "आपको केवल और केवल शुद्ध हिंदी (Hindi script) या प्राकृतिक बातचीत वाली हिंदी में ही बात करनी है। अंग्रेजी का उपयोग पूरी तरह से बंद कर दें। "
+    "मरीज से बहुत प्यार और सम्मान से बात करें (जैसे 'जी बताएं', 'मैं आपकी क्या सेवा कर सकती हूँ?')। "
+    "मरीज से उनका नाम, बीमारी या डॉक्टर का विभाग, और अपॉइंटमेंट का समय आराम से एक-एक करके पूछें। "
+    "याद रखें: जवाब बहुत छोटा, प्यारा और सीधा होना चाहिए (सिर्फ 1 से 2 वाक्य)। कोई फालतू की अंग्रेजी या मुश्किल शब्द न बोलें।"
 )
 
-# Active session tracking dictionary for the voice bot
+# Active session tracking dictionary
 call_logs = {}
 
 @app.route("/incoming-call", methods=['POST'])
@@ -26,16 +27,17 @@ def incoming_call():
     """Triggered instantly when a patient dials the hospital line."""
     from_number = request.form.get("From", "unknown")
     
-    # Initialize session history
+    # Initialize session history with the pure Hindi prompt
     call_logs[from_number] = [{"role": "system", "content": SYSTEM_PROMPT}]
     
-    greeting = "Welcome to Lucknow Hospital. How can I help you today?"
+    # Pure Hindi warm greeting
+    greeting = "सिटी हॉस्पिटल में आपका स्वागत है। मैं आपकी क्या सहायता कर सकती हूँ?"
     call_logs[from_number].append({"role": "assistant", "content": greeting})
     
-    # Twilio's standard Gather engine captures voice inputs and filters out noise automatically
+    # Using 'alice' with 'hi-IN' right from the start for native accent
     xml_data = f"""<?xml version="1.0" encoding="UTF-8"?>
     <Response>
-        <Say voice="Polly.Aditi" language="en-IN">{greeting}</Say>
+        <Say voice="alice" language="hi-IN">{greeting}</Say>
         <Gather input="speech" action="/handle-response" speechTimeout="auto" />
     </Response>"""
     return Response(xml_data, mimetype='text/xml')
@@ -49,7 +51,7 @@ def handle_response():
     if not user_speech:
         xml_data = """<?xml version="1.0" encoding="UTF-8"?>
         <Response>
-            <Say voice="Polly.Aditi" language="en-IN">I'm sorry, I didn't quite catch that. Could you please repeat?</Say>
+            <Say voice="alice" language="hi-IN">माफ़ कीजिएगा, मैं आपकी आवाज़ सुन नहीं पाई। क्या आप दोबारा बोलेंगे?</Say>
             <Gather input="speech" action="/handle-response" speechTimeout="auto" />
         </Response>"""
         return Response(xml_data, mimetype='text/xml')
@@ -68,22 +70,17 @@ def handle_response():
         print(f"🤖 AI Response: {ai_response}")
         call_logs[from_number].append({"role": "assistant", "content": ai_response})
         
-        # Shift voice profile automatically if Hindi script is detected
-       # Shift voice profile automatically if Hindi script is detected
-        voice_profile = 'voice="Polly.Aditi" language="en-IN"'
-        if any("\u0900" <= char <= "\u097F" for char in ai_response):
-            voice_profile = 'voice="alice" language="hi-IN"'
-            
+        # Enforcing free native Hindi engine for all responses
         xml_data = f"""<?xml version="1.0" encoding="UTF-8"?>
         <Response>
-            <Say {voice_profile}>{ai_response}</Say>
+            <Say voice="alice" language="hi-IN">{ai_response}</Say>
             <Gather input="speech" action="/handle-response" speechTimeout="auto" />
         </Response>"""
     except Exception as e:
         print(f"Error: {e}")
         xml_data = """<?xml version="1.0" encoding="UTF-8"?>
         <Response>
-            <Say voice="Polly.Aditi" language="en-IN">An internal connection issue occurred. Please try again.</Say>
+            <Say voice="alice" language="hi-IN">क्षमा करें, सर्वर में कुछ दिक्कत आ रही है। कृपया थोड़ी देर बाद प्रयास करें।</Say>
             <Gather input="speech" action="/handle-response" speechTimeout="auto" />
         </Response>"""
         
