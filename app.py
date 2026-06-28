@@ -2,19 +2,15 @@ import os
 import json
 import base64
 import asyncio
+import threading
 import websockets
 from flask import Flask, request, Response
 from groq import Groq
 import requests
 
-# --- GEVENT ASYNCIO BRIDGE PATCH ---
-import gevent.monkey
-gevent.monkey.patch_all()
-from gevent_loop import GeventLoop
-asyncio.set_event_loop_policy(GeventLoop())
-
 app = Flask(__name__)
 
+# --- SECURE API KEY CONFIGURATION ---
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 DEEPGRAM_API_KEY = os.environ.get("DEEPGRAM_API_KEY")
 
@@ -31,7 +27,7 @@ def generate_phone_voice(text_data):
     """Converts AI responses into 8kHz Mu-law telephony audio streams."""
     model = "aura-asteria-en"
     if any("\u0900" <= char <= "\u097F" for char in text_data):
-        model = "aura-amira-hi"
+        model = "aura-amira-hi"  # Shift to native Hindi voice model
         
     url = f"https://api.deepgram.com/v1/speak?model={model}&encoding=mulaw&sample_rate=8000"
     headers = {"Authorization": f"Token {DEEPGRAM_API_KEY}", "Content-Type": "application/json"}
@@ -65,37 +61,47 @@ async def dg_stream_handler(ws, stream_sid, call_history):
                     print(f"🗣️ Transcribed Voice: {transcript}")
                     call_history.append({"role": "user", "content": transcript})
                     
-                    loop = asyncio.get_event_loop()
-                    completion = await loop.run_in_executor(None, lambda: groq_client.chat.completions.create(
+                    # Call Groq safely inside the async flow
+                    completion = groq_client.chat.completions.create(
                         messages=call_history, model="llama-3.3-70b-versatile"
-                    ))
+                    )
                     ai_text = completion.choices[0].message.content
                     print(f"🤖 AI Reply: {ai_text}")
                     call_history.append({"role": "assistant", "content": ai_text})
                     
                     audio_payload = generate_phone_voice(ai_text)
                     if audio_payload:
-                        await ws.send(json.dumps({
+                        ws.send(json.dumps({
                             "event": "media", "streamSid": stream_sid,
                             "media": {"payload": audio_payload}
                         }))
 
         async def send_to_deepgram():
             while not ws.closed:
-                message = ws.receive()
-                if message is None: break
-                data = json.loads(message)
-                
-                if data['event'] == "media":
-                    payload = data['media']['payload']
-                    await dg_ws.send(json.dumps({"chunky_demux_stream": payload}))
-                elif data['event'] == "stop":
+                try:
+                    message = ws.receive()
+                    if message is None: break
+                    data = json.loads(message)
+                    
+                    if data['event'] == "media":
+                        payload = data['media']['payload']
+                        await dg_ws.send(json.dumps({"chunky_demux_stream": payload}))
+                    elif data['event'] == "stop":
+                        break
+                except Exception:
                     break
 
         await asyncio.gather(receive_from_deepgram(), send_to_deepgram())
 
+def start_async_loop(ws, stream_sid, call_history):
+    """Creates a completely isolated thread safety loop for the audio data runtime."""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(dg_stream_handler(ws, stream_sid, call_history))
+    loop.close()
+
 def handle_websocket(ws):
-    """Intercepts Twilio traffic and boots the async processing runtime loop."""
+    """Intercepts Twilio traffic and boots the background loop thread smoothly."""
     print("🚀 Connected to Twilio Audio Pipeline!")
     stream_sid = None
     call_history = [{"role": "system", "content": SYSTEM_PROMPT}]
@@ -111,9 +117,10 @@ def handle_websocket(ws):
                 ws.send(json.dumps({"event": "media", "streamSid": stream_sid, "media": {"payload": audio_payload}}))
             call_history.append({"role": "assistant", "content": greeting})
             
-            # Start the bridged loop cleanly
-            loop = asyncio.get_event_loop()
-            loop.run_until_complete(dg_stream_handler(ws, stream_sid, call_history))
+            # Spin up the async engine on a separate background thread to bypass gevent lockups
+            t = threading.Thread(target=start_async_loop, args=(ws, stream_sid, call_history))
+            t.daemon = True
+            t.start()
 
 class NativeWebSocketDispatcher(object):
     def __init__(self, flask_app):
@@ -131,5 +138,6 @@ if __name__ == "__main__":
     from geventwebsocket.handler import WebSocketHandler
     dispatcher_wrapped_app = NativeWebSocketDispatcher(app)
     port = int(os.environ.get("PORT", 10000))
+    print(f"Starting server on port {port}...")
     server = pywsgi.WSGIServer(('0.0.0.0', port), dispatcher_wrapped_app, handler_class=WebSocketHandler)
     server.serve_forever()
