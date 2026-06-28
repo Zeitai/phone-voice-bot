@@ -48,12 +48,8 @@ def generate_phone_voice(text_data):
 @app.route("/incoming-call", methods=['POST'])
 def incoming_call():
     """Triggered instantly by Twilio when a patient dials the hospital line."""
-    # Force the host connection to match the active incoming request cleanly
     host = request.host
-    
     xml_data = f'<?xml version="1.0" encoding="UTF-8"?><Response><Connect><Stream url="wss://{host}/media-stream" /></Connect></Response>'
-    
-    # Send it back as pure text/xml so Twilio doesn't read it as a webpage
     return Response(xml_data, mimetype='text/xml')
 
 @sockets.route('/media-stream')
@@ -85,10 +81,9 @@ def media_stream(ws):
             call_history.append({"role": "assistant", "content": initial_greeting})
             
         elif data['event'] == "media":
-            # For debugging purposes to ensure packets are flowing over the wire
             print("🎙️ Receiving live raw audio frame...")
             
-            # [STT Simulation Segment]
+            # Temporary simulator response context placeholder
             patient_speech_text = "Hello, look for an eye appointment" 
             call_history.append({"role": "user", "content": patient_speech_text})
             
@@ -114,11 +109,26 @@ def media_stream(ws):
             print("Call terminated.")
             break
 
+# --- WORKAROUND FOR WEBSOCKET MISMATCH ---
+# This safely intercepts incoming traffic before Flask handles it, separating normal HTTP from websockets
+class WebSocketMiddleware(object):
+    def __init__(self, apache_app):
+        self.app = apache_app
+
+    def __call__(self, environ, start_response):
+        path = environ.get('PATH_INFO', '')
+        if path == '/media-stream':
+            return sockets.wsgi_app(environ, start_response)
+        return self.app(environ, start_response)
+
 if __name__ == "__main__":
     from gevent import pywsgi
     from geventwebsocket.handler import WebSocketHandler
-    # Render maps internal traffic to port 10000 by default
+    
+    # Wrap our app inside the middleware interceptor
+    middleware_wrapped_app = WebSocketMiddleware(app)
+    
     port = int(os.environ.get("PORT", 10000))
     print(f"Starting server on port {port}...")
-    server = pywsgi.WSGIServer(('0.0.0.0', port), app, handler_class=WebSocketHandler)
+    server = pywsgi.WSGIServer(('0.0.0.0', port), middleware_wrapped_app, handler_class=WebSocketHandler)
     server.serve_forever()
