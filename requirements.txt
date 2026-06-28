@@ -1,7 +1,4 @@
 Flask
 groq
-requests
-gevent
-gevent-websocket
 gunicorn
-websockets
+flask-cors
