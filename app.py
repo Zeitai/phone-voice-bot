@@ -49,7 +49,7 @@ def handle_websocket(ws):
     stream_sid = None
     call_history = [{"role": "system", "content": SYSTEM_PROMPT}]
     
-    # We use a frame counter to pause before capturing input
+    # Track the frame window cleanly
     frame_counter = 0
     
     while not ws.closed:
@@ -70,14 +70,12 @@ def handle_websocket(ws):
         elif data['event'] == "media":
             frame_counter += 1
             
-            # Instead of a constant loop or a thread block, we wait for a steady window of connection frames 
-            # to simulate speech pause before checking what the user said.
-            if frame_counter == 120:  
-                print("🎙️ Checking incoming user voice buffer channel...")
+            # Every 150 frames (roughly every 3-4 seconds of silence/speech), trigger the next turn
+            if frame_counter % 150 == 0:  
+                print(f"🎙️ Active Loop Triggered at frame {frame_counter}...")
                 
-                # Production pipeline user voice anchor placeholder
-                user_speech = "Hello, I want to see a doctor."
-                print(f"🗣️ Captured Input: {user_speech}")
+                user_speech = "Hello, I need to book an eye checkup appointment."
+                print(f"🗣️ Simulated Input: {user_speech}")
                 call_history.append({"role": "user", "content": user_speech})
                 
                 try:
