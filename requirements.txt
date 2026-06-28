@@ -5,4 +5,3 @@ gevent
 gevent-websocket
 gunicorn
 websockets
-gevent-loop
