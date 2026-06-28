@@ -48,14 +48,13 @@ def generate_phone_voice(text_data):
 @app.route("/incoming-call", methods=['POST'])
 def incoming_call():
     """Triggered instantly by Twilio when a patient dials the hospital line."""
-    # Using a clean format strategy to feed the exact secure host string back to Twilio
+    # Force the host connection to match the active incoming request cleanly
     host = request.host
-    twiml_response = f"""<Response>
-        <Connect>
-            <Stream url="wss://{host}/media-stream" />
-        </Connect>
-    </Response>"""
-    return Response(twiml_response, mimetype='text/xml')
+    
+    xml_data = f'<?xml version="1.0" encoding="UTF-8"?><Response><Connect><Stream url="wss://{host}/media-stream" /></Connect></Response>'
+    
+    # Send it back as pure text/xml so Twilio doesn't read it as a webpage
+    return Response(xml_data, mimetype='text/xml')
 
 @sockets.route('/media-stream')
 def media_stream(ws):
