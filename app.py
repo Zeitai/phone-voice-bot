@@ -34,11 +34,11 @@ def incoming_call():
     greeting = "सिटी हॉस्पिटल में आपका स्वागत है। मैं आपकी क्या सहायता कर सकती हूँ?"
     call_logs[from_number].append({"role": "assistant", "content": greeting})
     
-    # Using 'alice' with 'hi-IN' right from the start for native accent
+    # Added speechTimeout="4" so it waits 4 seconds for you to start speaking
     xml_data = f"""<?xml version="1.0" encoding="UTF-8"?>
     <Response>
         <Say voice="alice" language="hi-IN">{greeting}</Say>
-        <Gather input="speech" action="/handle-response" speechTimeout="auto" />
+        <Gather input="speech" action="/handle-response" speechTimeout="4" />
     </Response>"""
     return Response(xml_data, mimetype='text/xml')
 
@@ -52,7 +52,7 @@ def handle_response():
         xml_data = """<?xml version="1.0" encoding="UTF-8"?>
         <Response>
             <Say voice="alice" language="hi-IN">माफ़ कीजिएगा, मैं आपकी आवाज़ सुन नहीं पाई। क्या आप दोबारा बोलेंगे?</Say>
-            <Gather input="speech" action="/handle-response" speechTimeout="auto" />
+            <Gather input="speech" action="/handle-response" speechTimeout="4" />
         </Response>"""
         return Response(xml_data, mimetype='text/xml')
         
@@ -70,18 +70,18 @@ def handle_response():
         print(f"🤖 AI Response: {ai_response}")
         call_logs[from_number].append({"role": "assistant", "content": ai_response})
         
-        # Enforcing free native Hindi engine for all responses
+        # Enforcing free native Hindi engine with custom timeout buffer
         xml_data = f"""<?xml version="1.0" encoding="UTF-8"?>
         <Response>
             <Say voice="alice" language="hi-IN">{ai_response}</Say>
-            <Gather input="speech" action="/handle-response" speechTimeout="auto" />
+            <Gather input="speech" action="/handle-response" speechTimeout="4" />
         </Response>"""
     except Exception as e:
         print(f"Error: {e}")
         xml_data = """<?xml version="1.0" encoding="UTF-8"?>
         <Response>
             <Say voice="alice" language="hi-IN">क्षमा करें, सर्वर में कुछ दिक्कत आ रही है। कृपया थोड़ी देर बाद प्रयास करें।</Say>
-            <Gather input="speech" action="/handle-response" speechTimeout="auto" />
+            <Gather input="speech" action="/handle-response" speechTimeout="4" />
         </Response>"""
         
     return Response(xml_data, mimetype='text/xml')
