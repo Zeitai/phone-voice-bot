@@ -29,7 +29,7 @@ def incoming_call():
     # Initialize session history
     call_logs[from_number] = [{"role": "system", "content": SYSTEM_PROMPT}]
     
-    greeting = "Welcome to City Hospital. How can I help you today?"
+    greeting = "Welcome to Lucknow Hospital. How can I help you today?"
     call_logs[from_number].append({"role": "assistant", "content": greeting})
     
     # Twilio's standard Gather engine captures voice inputs and filters out noise automatically
@@ -69,9 +69,10 @@ def handle_response():
         call_logs[from_number].append({"role": "assistant", "content": ai_response})
         
         # Shift voice profile automatically if Hindi script is detected
+       # Shift voice profile automatically if Hindi script is detected
         voice_profile = 'voice="Polly.Aditi" language="en-IN"'
         if any("\u0900" <= char <= "\u097F" for char in ai_response):
-            voice_profile = 'voice="Polly.Madhav" language="hi-IN"'
+            voice_profile = 'voice="alice" language="hi-IN"'
             
         xml_data = f"""<?xml version="1.0" encoding="UTF-8"?>
         <Response>
