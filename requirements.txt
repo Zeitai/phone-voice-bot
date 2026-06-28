@@ -3,5 +3,4 @@ groq
 requests
 gevent
 gevent-websocket
-flask-sockets
 gunicorn
