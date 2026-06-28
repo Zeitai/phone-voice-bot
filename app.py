@@ -2,12 +2,10 @@ import os
 import json
 import base64
 from flask import Flask, request, Response
-from flask_sockets import Sockets
 from groq import Groq
 import requests
 
 app = Flask(__name__)
-sockets = Sockets(app)
 
 # --- SECURE API KEY CONFIGURATION ---
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "YOUR_GROQ_API_KEY_LOCAL_FALLBACK")
@@ -52,10 +50,9 @@ def incoming_call():
     xml_data = f'<?xml version="1.0" encoding="UTF-8"?><Response><Connect><Stream url="wss://{host}/media-stream" /></Connect></Response>'
     return Response(xml_data, mimetype='text/xml')
 
-@sockets.route('/media-stream')
-def media_stream(ws):
-    """Maintains the live 2-way audio stream with the patient's phone carrier line."""
-    print("🚀 LIVE: Connected to Twilio Audio WebSocket Pipeline!")
+def handle_websocket(ws):
+    """Handles the live raw audio data stream entirely outside of Flask's routing maps."""
+    print("🚀 SUCCESS: Connected to Twilio Audio WebSocket Pipeline!")
     stream_sid = None
     call_history = [{"role": "system", "content": SYSTEM_PROMPT}]
     
@@ -72,7 +69,7 @@ def media_stream(ws):
             
             initial_greeting = "Welcome to City Hospital. सिटी हॉस्पिटल में आपका स्वागत है। How can I help you today?"
             audio_payload = generate_phone_voice(initial_greeting)
-            if audio_payload:
+            if audio_payload and stream_sid:
                 ws.send(json.dumps({
                     "event": "media",
                     "streamSid": stream_sid,
@@ -83,7 +80,7 @@ def media_stream(ws):
         elif data['event'] == "media":
             print("🎙️ Receiving live raw audio frame...")
             
-            # Temporary simulator response context placeholder
+            # Temporary context placeholder for simulator
             patient_speech_text = "Hello, look for an eye appointment" 
             call_history.append({"role": "user", "content": patient_speech_text})
             
@@ -109,26 +106,30 @@ def media_stream(ws):
             print("Call terminated.")
             break
 
-# --- WORKAROUND FOR WEBSOCKET MISMATCH ---
-# This safely intercepts incoming traffic before Flask handles it, separating normal HTTP from websockets
-class WebSocketMiddleware(object):
-    def __init__(self, apache_app):
-        self.app = apache_app
+# --- DISPATCHER MIDDLEWARE ---
+# This bypasses Flask entirely for the websocket route, routing it right to the handler function
+class NativeWebSocketDispatcher(object):
+    def __init__(self, flask_app):
+        self.flask_app = flask_app
 
     def __call__(self, environ, start_response):
         path = environ.get('PATH_INFO', '')
         if path == '/media-stream':
-            return sockets.wsgi_app(environ, start_response)
-        return self.app(environ, start_response)
+            # Safely extract the active websocket connection from environment context
+            ws = environ.get('wsgi.websocket')
+            if ws:
+                handle_websocket(ws)
+                return []
+        return self.flask_app(environ, start_response)
 
 if __name__ == "__main__":
     from gevent import pywsgi
     from geventwebsocket.handler import WebSocketHandler
     
-    # Wrap our app inside the middleware interceptor
-    middleware_wrapped_app = WebSocketMiddleware(app)
+    # Wrap our app inside the direct pipeline interceptor
+    dispatcher_wrapped_app = NativeWebSocketDispatcher(app)
     
     port = int(os.environ.get("PORT", 10000))
     print(f"Starting server on port {port}...")
-    server = pywsgi.WSGIServer(('0.0.0.0', port), middleware_wrapped_app, handler_class=WebSocketHandler)
+    server = pywsgi.WSGIServer(('0.0.0.0', port), dispatcher_wrapped_app, handler_class=WebSocketHandler)
     server.serve_forever()
