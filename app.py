@@ -66,7 +66,7 @@ def handle_response():
     
     try:
         completion = groq_client.chat.completions.create(
-            messages=call_logs[from_number], model="llama-3.3-70b-versatile"
+            messages=call_logs[from_number], model="llama-3.1-8b-instant"
         )
         ai_response = completion.choices[0].message.content
         print(f"🤖 AI Response: {ai_response}")
