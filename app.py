@@ -10,15 +10,16 @@ CORS(app)
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 groq_client = Groq(api_key=GROQ_API_KEY)
 
-# --- COMMERCIAL RECEPTIONIST SYSTEM INSTRUCTIONS ---
+# --- GLOBAL COMMERCIAL RECEPTIONIST SYSTEM INSTRUCTIONS ---
 SYSTEM_PROMPT = (
-    "आप सिटी हॉस्पिटल (City Hospital) की एक बहुत ही विनम्र, मददगार और पेशेवर महिला एआई रिसेप्शनिस्ट (AI Receptionist) हैं। "
-    "आपको केवल और केवल शुद्ध हिंदी (Hindi script) या प्राकृतिक बातचीत वाली हिंदी में ही बात करनी है। अंग्रेजी अक्षरों का उपयोग पूरी तरह से बंद कर दें। "
-    "मरीज से बहुत प्यार और सम्मान से बात करें (जैसे 'जी बताएं', 'मैं आपकी क्या सेवा कर सकती हूँ?')। "
-    "मरीज से उनका नाम, बीमारी या डॉक्टर का विभाग, और अपॉइंटमेंट का समय आराम से एक-एक करके पूछें। "
-    "याद रखें: जवाब बहुत छोटा, प्यारा और सीधा होना चाहिए (सिर्फ 1 से 2 वाक्य)। मुश्किल शब्द न बोलें। "
-    "क्रिटिकल रूल: जैसे ही मरीज अपना नाम, बीमारी/विभाग और समय बता दे, आप कहें 'आपका अपॉइंटमेंट बुक हो गया है, अस्पताल आने के लिए धन्यवाद।' "
-    "और अपने जवाब के अंत में अनिवार्य रूप से '[CALL_END]' शब्द लिख दें ताकि सिस्टम कॉल काट सके।"
+    "You are a highly professional, polite, and helpful female AI Receptionist for City Hospital. "
+    "Your primary objective is to assist English-speaking patients from the US, UK, and Canada. "
+    "Interact with the patient with absolute respect, empathy, and corporate standard clarity. "
+    "Efficiently collect the patient's name, their medical concern or requested department, and their preferred appointment time one by one. "
+    "Keep your responses concise, clear, and professional (strictly 1 to 2 sentences max). Avoid complex jargon or long explanations. "
+    "CRITICAL BUSINESS RULE: As soon as the patient provides their name, medical concern, and appointment time, you must state: "
+    "'Your appointment has been successfully booked. Thank you for calling City Hospital.' "
+    "Immediately append the exact token '[CALL_END]' at the very end of your response so the telephony server knows to hang up."
 )
 
 # Active session tracking dictionary
@@ -29,31 +30,33 @@ def incoming_call():
     """Triggered instantly when a patient dials the hospital line."""
     from_number = request.form.get("From", "unknown")
     
-    # Initialize session history with the pure Hindi prompt
+    # Initialize session history with the global English prompt
     call_logs[from_number] = [{"role": "system", "content": SYSTEM_PROMPT}]
     
-    # Pure Hindi warm greeting
-    greeting = "सिटी हॉस्पिटल में आपका स्वागत है। मैं आपकी क्या सहायता कर सकती हूँ?"
+    # Premium international warm greeting
+    greeting = "Welcome to City Hospital. How may I assist with your appointment scheduling today?"
     call_logs[from_number].append({"role": "assistant", "content": greeting})
     
-    # Integrated Premium Polly.Aditi Engine
+    # Integrated Premium US English Joanna Neural Engine with SSML for flawless cadence
     xml_data = f"""<?xml version="1.0" encoding="UTF-8"?>
     <Response>
-        <Say voiceGoogle.hi-IN-Wavenet-A" language="hi-IN">{greeting}</Say>
+        <Say voice="Polly.Joanna-Neural">
+            <prosody rate="98%">{greeting}</prosody>
+        </Say>
         <Gather input="speech" action="/handle-response" speechTimeout="4" />
     </Response>"""
     return Response(xml_data, mimetype='text/xml')
 
 @app.route("/handle-response", methods=['POST'])
 def handle_response():
-    """Processes incoming transcribed text and dynamically routes with Polly.Aditi voice."""
+    """Processes incoming transcribed global text and dynamically routes with premium speech."""
     from_number = request.form.get("From", "unknown")
     user_speech = request.form.get("SpeechResult", "")
     
     if not user_speech:
         xml_data = """<?xml version="1.0" encoding="UTF-8"?>
         <Response>
-            <Say voice="Google.hi-IN-Wavenet-A" language="hi-IN">माफ़ कीजिएगा, मैं आपकी आवाज़ सुन नहीं पाई। क्या आप दोबारा बोलेंगे?</Say>
+            <Say voice="Polly.Joanna-Neural">I am sorry, I did not catch that. Could you please repeat it?</Say>
             <Gather input="speech" action="/handle-response" speechTimeout="4" />
         </Response>"""
         return Response(xml_data, mimetype='text/xml')
@@ -65,8 +68,10 @@ def handle_response():
     call_logs[from_number].append({"role": "user", "content": user_speech})
     
     try:
+        # Optimized for ultra-fast conversational speeds using the instant framework
         completion = groq_client.chat.completions.create(
-            messages=call_logs[from_number], model="llama-3.1-8b-instant"
+            messages=call_logs[from_number], 
+            model="llama-3.1-8b-instant"
         )
         ai_response = completion.choices[0].message.content
         print(f"🤖 AI Response: {ai_response}")
@@ -76,17 +81,21 @@ def handle_response():
             clean_response = ai_response.replace("[CALL_END]", "").strip()
             xml_data = f"""<?xml version="1.0" encoding="UTF-8"?>
             <Response>
-                <Say voice="Google.hi-IN-Wavenet-A" language="hi-IN">{clean_response}</Say>
+                <Say voice="Polly.Joanna-Neural">
+                    <prosody rate="98%">{clean_response}</prosody>
+                </Say>
                 <Hangup/>
             </Response>"""
-            # Clear session logs to free memory
+            # Clear session logs to free server memory
             if from_number in call_logs:
                 del call_logs[from_number]
         else:
             call_logs[from_number].append({"role": "assistant", "content": ai_response})
             xml_data = f"""<?xml version="1.0" encoding="UTF-8"?>
             <Response>
-                <Say voice="Google.hi-IN-Wavenet-A" language="hi-IN">{ai_response}</Say>
+                <Say voice="Polly.Joanna-Neural">
+                    <prosody rate="98%">{ai_response}</prosody>
+                </Say>
                 <Gather input="speech" action="/handle-response" speechTimeout="4" />
             </Response>"""
             
@@ -94,7 +103,7 @@ def handle_response():
         print(f"Error: {e}")
         xml_data = """<?xml version="1.0" encoding="UTF-8"?>
         <Response>
-            <Say voice="Google.hi-IN-Wavenet-A" language="hi-IN">क्षमा करें, सर्वर में कुछ दिक्कत आ रही है। कृपया थोड़ी देर बाद प्रयास करें।</Say>
+            <Say voice="Polly.Joanna-Neural">We are experiencing technical difficulties. Please try your call again shortly.</Say>
             <Gather input="speech" action="/handle-response" speechTimeout="4" />
         </Response>"""
         
@@ -102,7 +111,7 @@ def handle_response():
 
 @app.route("/hq-chat", methods=['POST'])
 def hq_chat():
-    """Acts as a secure API bridge proxy for the Dashboard."""
+    """Acts as a secure API bridge proxy for the global Management Dashboard."""
     try:
         data = request.json
         system_instructions = data.get("system", "")
@@ -112,7 +121,7 @@ def hq_chat():
         
         completion = groq_client.chat.completions.create(
             messages=payload, 
-            model="llama-3.3-70b-versatile"
+            model="llama-3.1-8b-instant"
         )
         
         ai_reply = completion.choices[0].message.content
