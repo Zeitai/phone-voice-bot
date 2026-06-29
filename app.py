@@ -10,13 +10,15 @@ CORS(app)
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 groq_client = Groq(api_key=GROQ_API_KEY)
 
-# --- PURE HINDI CUSTOM RECEPTONIST PROMPT ---
+# --- COMMERCIAL RECEPTIONIST SYSTEM INSTRUCTIONS ---
 SYSTEM_PROMPT = (
     "आप सिटी हॉस्पिटल (City Hospital) की एक बहुत ही विनम्र, मददगार और पेशेवर महिला एआई रिसेप्शनिस्ट (AI Receptionist) हैं। "
-    "आपको केवल और केवल शुद्ध हिंदी (Hindi script) या प्राकृतिक बातचीत वाली हिंदी में ही बात करनी है। अंग्रेजी का उपयोग पूरी तरह से बंद कर दें। "
+    "आपको केवल और केवल शुद्ध हिंदी (Hindi script) या प्राकृतिक बातचीत वाली हिंदी में ही बात करनी है। अंग्रेजी अक्षरों का उपयोग पूरी तरह से बंद कर दें। "
     "मरीज से बहुत प्यार और सम्मान से बात करें (जैसे 'जी बताएं', 'मैं आपकी क्या सेवा कर सकती हूँ?')। "
     "मरीज से उनका नाम, बीमारी या डॉक्टर का विभाग, और अपॉइंटमेंट का समय आराम से एक-एक करके पूछें। "
-    "याद रखें: जवाब बहुत छोटा, प्यारा और सीधा होना चाहिए (सिर्फ 1 से 2 वाक्य)। कोई फालतू की अंग्रेजी या मुश्किल शब्द न बोलें।"
+    "याद रखें: जवाब बहुत छोटा, प्यारा और सीधा होना चाहिए (सिर्फ 1 से 2 वाक्य)। मुश्किल शब्द न बोलें। "
+    "क्रिटिकल रूल: जैसे ही मरीज अपना नाम, बीमारी/विभाग और समय बता दे, आप कहें 'आपका अपॉइंटमेंट बुक हो गया है, अस्पताल आने के लिए धन्यवाद।' "
+    "और अपने जवाब के अंत में अनिवार्य रूप से '[CALL_END]' शब्द लिख दें ताकि सिस्टम कॉल काट सके।"
 )
 
 # Active session tracking dictionary
@@ -34,24 +36,24 @@ def incoming_call():
     greeting = "सिटी हॉस्पिटल में आपका स्वागत है। मैं आपकी क्या सहायता कर सकती हूँ?"
     call_logs[from_number].append({"role": "assistant", "content": greeting})
     
-    # Switched to the universally supported language code and standard engine
+    # Integrated Premium Polly.Aditi Engine
     xml_data = f"""<?xml version="1.0" encoding="UTF-8"?>
     <Response>
-        <Say language="hi-IN">{greeting}</Say>
+        <Say voice="Polly.Aditi" language="hi-IN">{greeting}</Say>
         <Gather input="speech" action="/handle-response" speechTimeout="4" />
     </Response>"""
     return Response(xml_data, mimetype='text/xml')
 
 @app.route("/handle-response", methods=['POST'])
 def handle_response():
-    """Processes incoming transcribed text inputs cleanly without static stream interruptions."""
+    """Processes incoming transcribed text and dynamically routes with Polly.Aditi voice."""
     from_number = request.form.get("From", "unknown")
     user_speech = request.form.get("SpeechResult", "")
     
     if not user_speech:
         xml_data = """<?xml version="1.0" encoding="UTF-8"?>
         <Response>
-            <Say language="hi-IN">माफ़ कीजिएगा, मैं आपकी आवाज़ सुन नहीं पाई। क्या आप दोबारा बोलेंगे?</Say>
+            <Say voice="Polly.Aditi" language="hi-IN">माफ़ कीजिएगा, मैं आपकी आवाज़ सुन नहीं पाई। क्या आप दोबारा बोलेंगे?</Say>
             <Gather input="speech" action="/handle-response" speechTimeout="4" />
         </Response>"""
         return Response(xml_data, mimetype='text/xml')
@@ -68,19 +70,31 @@ def handle_response():
         )
         ai_response = completion.choices[0].message.content
         print(f"🤖 AI Response: {ai_response}")
-        call_logs[from_number].append({"role": "assistant", "content": ai_response})
         
-        # Switched to guaranteed standard hi-IN language processing block
-        xml_data = f"""<?xml version="1.0" encoding="UTF-8"?>
-        <Response>
-            <Say language="hi-IN">{ai_response}</Say>
-            <Gather input="speech" action="/handle-response" speechTimeout="4" />
-        </Response>"""
+        # Check if the AI determined the conversation is successfully finished
+        if "[CALL_END]" in ai_response:
+            clean_response = ai_response.replace("[CALL_END]", "").strip()
+            xml_data = f"""<?xml version="1.0" encoding="UTF-8"?>
+            <Response>
+                <Say voice="Polly.Aditi" language="hi-IN">{clean_response}</Say>
+                <Hangup/>
+            </Response>"""
+            # Clear session logs to free memory
+            if from_number in call_logs:
+                del call_logs[from_number]
+        else:
+            call_logs[from_number].append({"role": "assistant", "content": ai_response})
+            xml_data = f"""<?xml version="1.0" encoding="UTF-8"?>
+            <Response>
+                <Say voice="Polly.Aditi" language="hi-IN">{ai_response}</Say>
+                <Gather input="speech" action="/handle-response" speechTimeout="4" />
+            </Response>"""
+            
     except Exception as e:
         print(f"Error: {e}")
         xml_data = """<?xml version="1.0" encoding="UTF-8"?>
         <Response>
-            <Say language="hi-IN">क्षма करें, सर्वर में कुछ दिक्कत आ रही है। कृपया थोड़ी देर बाद प्रयास करें।</Say>
+            <Say voice="Polly.Aditi" language="hi-IN">क्षमा करें, सर्वर में कुछ दिक्कत आ रही है। कृपया थोड़ी देर बाद प्रयास करें।</Say>
             <Gather input="speech" action="/handle-response" speechTimeout="4" />
         </Response>"""
         
@@ -88,7 +102,7 @@ def handle_response():
 
 @app.route("/hq-chat", methods=['POST'])
 def hq_chat():
-    """Acts as a secure API bridge proxy for the Zeit AI HQ Dashboard."""
+    """Acts as a secure API bridge proxy for the Dashboard."""
     try:
         data = request.json
         system_instructions = data.get("system", "")
