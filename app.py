@@ -39,7 +39,7 @@ def incoming_call():
     # Integrated Premium Polly.Aditi Engine
     xml_data = f"""<?xml version="1.0" encoding="UTF-8"?>
     <Response>
-        <Say voice="hi-IN-Wavenet-A" language="hi-IN">{greeting}</Say>
+        <Say voiceGoogle.hi-IN-Wavenet-A" language="hi-IN">{greeting}</Say>
         <Gather input="speech" action="/handle-response" speechTimeout="4" />
     </Response>"""
     return Response(xml_data, mimetype='text/xml')
@@ -53,7 +53,7 @@ def handle_response():
     if not user_speech:
         xml_data = """<?xml version="1.0" encoding="UTF-8"?>
         <Response>
-            <Say voice="hi-IN-Wavenet-A" language="hi-IN">माफ़ कीजिएगा, मैं आपकी आवाज़ सुन नहीं पाई। क्या आप दोबारा बोलेंगे?</Say>
+            <Say voice="Google.hi-IN-Wavenet-A" language="hi-IN">माफ़ कीजिएगा, मैं आपकी आवाज़ सुन नहीं पाई। क्या आप दोबारा बोलेंगे?</Say>
             <Gather input="speech" action="/handle-response" speechTimeout="4" />
         </Response>"""
         return Response(xml_data, mimetype='text/xml')
@@ -76,7 +76,7 @@ def handle_response():
             clean_response = ai_response.replace("[CALL_END]", "").strip()
             xml_data = f"""<?xml version="1.0" encoding="UTF-8"?>
             <Response>
-                <Say voice="Polly.Aditi" language="hi-IN">{clean_response}</Say>
+                <Say voice="Google.hi-IN-Wavenet-A" language="hi-IN">{clean_response}</Say>
                 <Hangup/>
             </Response>"""
             # Clear session logs to free memory
@@ -86,7 +86,7 @@ def handle_response():
             call_logs[from_number].append({"role": "assistant", "content": ai_response})
             xml_data = f"""<?xml version="1.0" encoding="UTF-8"?>
             <Response>
-                <Say voice="hi-IN-Wavenet-A" language="hi-IN">{ai_response}</Say>
+                <Say voice="Google.hi-IN-Wavenet-A" language="hi-IN">{ai_response}</Say>
                 <Gather input="speech" action="/handle-response" speechTimeout="4" />
             </Response>"""
             
@@ -94,7 +94,7 @@ def handle_response():
         print(f"Error: {e}")
         xml_data = """<?xml version="1.0" encoding="UTF-8"?>
         <Response>
-            <Say voice="Polly.Aditi" language="hi-IN">क्षमा करें, सर्वर में कुछ दिक्कत आ रही है। कृपया थोड़ी देर बाद प्रयास करें।</Say>
+            <Say voice="Google.hi-IN-Wavenet-A" language="hi-IN">क्षमा करें, सर्वर में कुछ दिक्कत आ रही है। कृपया थोड़ी देर बाद प्रयास करें।</Say>
             <Gather input="speech" action="/handle-response" speechTimeout="4" />
         </Response>"""
         
